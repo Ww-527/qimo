@@ -1,12 +1,15 @@
 import os
 import pandas as pd
 import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 
-# 无需Matplotlib字体配置！直接用Streamlit原生图表
-st.set_page_config(page_title="学生成绩分析与预测系统", layout="wide")
+# 页面配置
+st.set_page_config(page_title="学生成绩分析与预测系统", layout="wide")  
 
 LIGHT_FILE = "student_data_light.csv"
 
+# 加载轻量数据
 @st.cache_data(show_spinner=False)
 def load_data():
     if os.path.isfile(LIGHT_FILE):
@@ -29,6 +32,7 @@ df = load_data()
 st.sidebar.title("导航菜单📃")
 page = st.sidebar.radio("请选择功能页面", ["项目介绍", "专业数据分析", "成绩预测"])
 
+# -------------------------- 1. 项目介绍页面（保留原有逻辑） --------------------------
 if page == "项目介绍":
     st.title("🎓学生成绩分析与预测系统")
     st.markdown('***')
@@ -63,58 +67,198 @@ if page == "项目介绍":
     tech_cols = st.columns(4)
     with tech_cols[0]: st.markdown("#### 前端框架: "); st.write("Streamlit")
     with tech_cols[1]: st.markdown("#### 数据处理:"); st.write("Pandas"); st.write("Numpy")
-    with tech_cols[2]: st.markdown("#### 可视化:"); st.write("Streamlit原生图表")
+    with tech_cols[2]: st.markdown("#### 可视化:"); st.write("Plotly"); st.write("Streamlit原生图表")
     with tech_cols[3]: st.markdown("#### 机器学习:"); st.write("Scikit-learn")
 
+# -------------------------- 2. 专业数据分析页面（完全按新要求重构） --------------------------
 elif page == "专业数据分析":
     st.title("📊专业数据分析")
     if not df.empty:
-        # 1. 核心指标表
-        if all(c in df.columns for c in ["专业", "期中考试分数", "期末考试分数", "每周学习时长（小时）"]):
-            st.subheader("1. 各专业核心学习指标汇总")
-            core = df.groupby("专业")[["每周学习时长（小时）", "期中考试分数", "期末考试分数"]].mean().round(2)
-            core.columns = ["每周平均学时", "期中考试平均分", "期末考试平均分"]
-            st.dataframe(core.reset_index(), use_container_width=True)
-
-        # 2. 性别堆叠柱（Streamlit原生st.bar_chart）
-        if {"专业", "性别"} <= set(df.columns):
-            st.subheader("2. 各专业男女性别比例")
-            gender_cnt = df.groupby(["专业", "性别"]).size().unstack(fill_value=0)
-            if "男" in gender_cnt and "女" in gender_cnt:
-                gender_cnt = gender_cnt[["男", "女"]]
-            # 原生堆叠柱状图（自动支持中文）
-            st.bar_chart(gender_cnt, use_container_width=True, stack=True)
-
-        # 3. 考试分数折线（Streamlit原生st.line_chart）
-        if {"专业", "期中考试分数", "期末考试分数"} <= set(df.columns):
-            st.subheader("3. 各专业考试分数趋势")
-            exam = df.groupby("专业")[["期中考试分数", "期末考试分数"]].mean().round(2)
-            st.line_chart(exam, use_container_width=True, marker="o")
-
-        # 4. 出勤率柱（Streamlit原生st.bar_chart，带数值标签）
-        if {"专业", "上课出勤率"} <= set(df.columns):
-            st.subheader("4. 各专业平均上课出勤率")
-            attend = df.groupby("专业")["上课出勤率"].mean().round(2).reset_index()
-            attend.columns = ["专业", "平均上课出勤率（%）"]
-            # 原生柱状图+显示数据标签
-            st.bar_chart(attend.set_index("专业"), use_container_width=True)
-            # 显示数值（避免中文问题）
-            st.dataframe(attend, use_container_width=True, hide_index=True)
-
-        # 5. 大数据管理双柱（Streamlit原生st.bar_chart）
-        target = "大数据管理"
-        if target in df["专业"].values:
-            st.subheader(f"5. {target}专业核心指标")
-            tmp = df[df["专业"] == target]
-            metrics = pd.DataFrame({
-                "指标": ["平均上课出勤率", "期末考试平均分"],
-                "数值": [round(tmp["上课出勤率"].mean(), 2), round(tmp["期末考试分数"].mean(), 2)]
-            })
-            st.bar_chart(metrics.set_index("指标"), use_container_width=True)
-
+        # 先计算各专业的核心统计指标
+        major_stats = df.groupby("专业").agg({
+            "每周学习时长（小时）": "mean",
+            "期中考试分数": "mean",
+            "期末考试分数": "mean",
+            "上课出勤率": "mean"
+        }).round(2)
+        major_stats = major_stats.rename(columns={
+            "每周学习时长（小时）": "每周平均学时",
+            "期中考试分数": "期中考试平均分",
+            "期末考试分数": "期末考试平均分",
+            "上课出勤率": "平均上课出勤率"
+        }).reset_index()
+        
+        # （1）表格展示各专业核心指标
+        st.subheader("1. 各专业核心指标统计")
+        st.dataframe(
+            major_stats,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "专业": st.column_config.TextColumn("专业名称", width="medium"),
+                "每周平均学时": st.column_config.NumberColumn("每周平均学时（小时）", format="%.2f"),
+                "期中考试平均分": st.column_config.NumberColumn(format="%.2f"),
+                "期末考试平均分": st.column_config.NumberColumn(format="%.2f"),
+                "平均上课出勤率": st.column_config.NumberColumn(format="%.2f%%")
+            }
+        )
+        
+        st.markdown('***')
+        
+        # （2）双层柱状图展示每个专业的男女性别比例
+        st.subheader("2. 各专业男女性别比例（双层柱状图）")
+        # 计算各专业男女人数
+        gender_data = df.groupby(["专业", "性别"]).size().unstack(fill_value=0).reset_index()
+        # 确保男女列都存在
+        if "男" not in gender_data.columns:
+            gender_data["男"] = 0
+        if "女" not in gender_data.columns:
+            gender_data["女"] = 0
+        
+        # 创建双层柱状图
+        fig_gender = go.Figure()
+        # 添加男生柱子
+        fig_gender.add_trace(go.Bar(
+            x=gender_data["专业"],
+            y=gender_data["男"],
+            name="男生",
+            marker_color="#1E88E5",
+            text=gender_data["男"],
+            textposition='auto'
+        ))
+        # 添加女生柱子
+        fig_gender.add_trace(go.Bar(
+            x=gender_data["专业"],
+            y=gender_data["女"],
+            name="女生",
+            marker_color="#26A69A",
+            text=gender_data["女"],
+            textposition='auto'
+        ))
+        # 布局设置
+        fig_gender.update_layout(
+            barmode='group',  # 双层/分组柱状图
+            template="plotly_dark",
+            height=400,
+            xaxis_title="专业",
+            yaxis_title="人数",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_gender, use_container_width=True)
+        
+        st.markdown('***')
+        
+        # （3）折线图展示每个专业的期中/期末考试分数
+        st.subheader("3. 各专业期中/期末考试分数对比（折线图）")
+        # 转换数据格式用于折线图
+        score_data = major_stats.melt(
+            id_vars="专业",
+            value_vars=["期中考试平均分", "期末考试平均分"],
+            var_name="考试类型",
+            value_name="平均分"
+        )
+        
+        fig_score = px.line(
+            score_data,
+            x="专业",
+            y="平均分",
+            color="考试类型",
+            markers=True,
+            template="plotly_dark",
+            height=400,
+            color_discrete_map={
+                "期中考试平均分": "#FFA000",
+                "期末考试平均分": "#4CAF50"
+            }
+        )
+        # 优化折线图样式
+        fig_score.update_traces(line=dict(width=3), marker=dict(size=8))
+        fig_score.update_layout(
+            xaxis_title="专业",
+            yaxis_title="平均分",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_score, use_container_width=True)
+        
+        st.markdown('***')
+        
+        # （4）单层柱状图展示每个专业的平均上课出勤率
+        st.subheader("4. 各专业平均上课出勤率")
+        fig_attendance = px.bar(
+            major_stats,
+            x="专业",
+            y="平均上课出勤率",
+            template="plotly_dark",
+            height=400,
+            color="平均上课出勤率",
+            color_continuous_scale=px.colors.sequential.Greens,
+            text="平均上课出勤率"
+        )
+        fig_attendance.update_traces(
+            texttemplate="%{text:.2f}%",
+            textposition='outside'
+        )
+        fig_attendance.update_layout(
+            xaxis_title="专业",
+            yaxis_title="平均上课出勤率（%）",
+            coloraxis_showscale=False,
+            yaxis=dict(range=[0, 100])
+        )
+        st.plotly_chart(fig_attendance, use_container_width=True)
+        
+        st.markdown('***')
+        
+        # （5）展示大数据管理专业的平均上课出勤率和期末考试分数
+        st.subheader("5. 大数据管理专业专项分析")
+        target_major = "大数据管理"
+        if target_major in major_stats["专业"].values:
+            # 提取大数据管理专业的数据
+            bigdata_data = major_stats[major_stats["专业"] == target_major].iloc[0]
+            
+            # 使用双指标柱状图展示
+            fig_bigdata = go.Figure()
+            # 处理数据，出勤率保留百分比格式，分数保留小数
+            metrics = ["平均上课出勤率", "期末考试平均分"]
+            values = [bigdata_data["平均上课出勤率"], bigdata_data["期末考试平均分"]]
+            
+            fig_bigdata.add_trace(go.Bar(
+                x=metrics,
+                y=values,
+                marker_color=["#2196F3", "#FF9800"],
+                text=[f"{v:.2f}%" if i==0 else f"{v:.2f}分" for i, v in enumerate(values)],
+                textposition='auto'
+            ))
+            
+            fig_bigdata.update_layout(
+                template="plotly_dark",
+                height=400,
+                title=f"{target_major}专业核心指标",
+                yaxis=dict(range=[0, 100])
+            )
+            st.plotly_chart(fig_bigdata, use_container_width=True)
+            
+            # 补充展示详细信息
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    label=f"{target_major} - 平均上课出勤率",
+                    value=f"{bigdata_data['平均上课出勤率']:.2f}%",
+                    delta=f"{bigdata_data['平均上课出勤率'] - major_stats['平均上课出勤率'].mean():.2f}%",
+                    delta_color="normal"
+                )
+            with col2:
+                st.metric(
+                    label=f"{target_major} - 期末考试平均分",
+                    value=f"{bigdata_data['期末考试平均分']:.2f}分",
+                    delta=f"{bigdata_data['期末考试平均分'] - major_stats['期末考试平均分'].mean():.2f}分",
+                    delta_color="normal"
+                )
+        else:
+            st.warning(f"未找到{target_major}专业的数据！")
     else:
         st.warning("暂无数据可展示")
 
+# -------------------------- 3. 成绩预测页面（保留原有逻辑） --------------------------
 elif page == "成绩预测":
     st.title("🔍期末成绩预测")
     st.subheader("分数段说明")
